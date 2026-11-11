@@ -143,3 +143,8 @@ html.pane-right #home .hbrand{display:none}
 #tabMenu button:hover{background:color-mix(in srgb,var(--fg) 8%,transparent)}
 #tabMenu button svg{width:17px;height:17px;color:var(--fg-2)}
 #tabMenu hr{border:0;height:1px;background:var(--sep);margin:4px 8px}
+
+/* A tab from the other split pane is hovering here */
+#app.tab-drop::after{content:"Drop to open here";position:absolute;inset:calc(var(--ts) + 6px) 10px 10px;z-index:60;display:grid;place-items:center;
+  border-radius:24px;border:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);
+  font:600 15px/1 var(--font-display);color:var(--accent);pointer-events:none;animation:resIn .3s var(--spring)}

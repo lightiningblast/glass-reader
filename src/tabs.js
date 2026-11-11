@@ -12,6 +12,7 @@
 
   const tabs = [];
   let active = null, uid = 0, homeView = 'home', recents = [], recentQuery = '';
+  let moveToWindow = () => {};
 
   /* ---------- Tabs ---------- */
   const make = () => ({ id: ++uid, kind: 'home', doc: null, view: null, title: 'Home' });
@@ -65,10 +66,58 @@
     if (e.target.closest('[data-close]')) close(t); else activate(t);
   });
   strip.addEventListener('auxclick', e => { if (e.button !== 1) return; const el = e.target.closest('.tab'); if (el) close(tabs.find(x => x.id === +el.dataset.id)); });
-  // Drag tabs to reorder them.
+  /* ---------- Dragging tabs ----------
+     Within the strip: reorder. Onto the other split pane: move the tab there.
+     Out of the window: the tab becomes its own window (ready for Windows Snap). */
+  const pane = () => (GR.split && GR.split.right) ? 'right' : 'left';
+  const otherPane = () => pane() === 'left' ? 'right' : 'left';
+  const TAB_TYPE = p => 'application/x-gr-tab-' + p;
+  const docOf = t => ({ data: t.doc.bytes.slice(), name: t.doc.name, path: t.doc.path, seeds: t.doc.seeds });
   let dragId = null;
-  strip.addEventListener('dragstart', e => { const el = e.target.closest('.tab'); if (!el) return; dragId = +el.dataset.id; e.dataTransfer.effectAllowed = 'move'; el.classList.add('dragging'); });
-  strip.addEventListener('dragend', () => { dragId = null; renderTabs(); });
+  strip.addEventListener('dragstart', e => {
+    const el = e.target.closest('.tab'); if (!el) return;
+    dragId = +el.dataset.id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(TAB_TYPE(pane()), String(dragId));
+    e.dataTransfer.setData('text/plain', el.querySelector('.tab-t').textContent);
+    el.classList.add('dragging');
+  });
+  strip.addEventListener('dragend', async e => {
+    const t = tabs.find(x => x.id === dragId); dragId = null; renderTabs();
+    if (!t || !t.doc || !D || !D.tearOff || e.dataTransfer.dropEffect !== 'none') return;
+    // Dropped outside every Glass Reader pane? Check where the pointer ended up.
+    const at = await D.cursor();
+    const inside = at.x >= screenX && at.x < screenX + outerWidth && at.y >= screenY && at.y < screenY + outerHeight;
+    if (inside) return;
+    D.tearOff(docOf(t), at);
+    close(t);
+  });
+  moveToWindow = t => { if (t && t.doc && D && D.tearOff) { D.tearOff(docOf(t), null); close(t); } };
+  // Accept a tab dragged from the other split pane.
+  document.addEventListener('dragover', e => {
+    if (!e.dataTransfer.types.includes(TAB_TYPE(otherPane()))) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move'; app.classList.add('tab-drop');
+  }, true);
+  document.addEventListener('dragleave', e => { if (!e.relatedTarget) app.classList.remove('tab-drop'); }, true);
+  document.addEventListener('drop', e => {
+    app.classList.remove('tab-drop');
+    const id = e.dataTransfer.getData(TAB_TYPE(otherPane())); if (!id) return;
+    e.preventDefault(); e.stopPropagation();
+    const target = pane() === 'right' ? parent : ($('#splitFrame') || {}).contentWindow;
+    if (target) target.postMessage({ type: 'gr-give-tab', id: +id }, '*');
+  }, true);
+  addEventListener('message', e => {
+    const m = e.data; if (!m || !m.type) return;
+    const frame = $('#splitFrame');
+    const fromPane = e.source === parent && parent !== window || (frame && e.source === frame.contentWindow);
+    if (!fromPane) return;
+    if (m.type === 'gr-give-tab') {
+      const t = tabs.find(x => x.id === m.id); if (!t || !t.doc) return;
+      e.source.postMessage({ type: 'gr-take-tab', doc: docOf(t) }, '*');
+      close(t);
+    }
+    if (m.type === 'gr-take-tab') { const d = m.doc; GR.openPdf(new Uint8Array(d.data), d.name, d.seeds, { path: d.path }); }
+  });
   strip.addEventListener('dragover', e => {
     if (dragId == null) return; e.preventDefault(); e.stopPropagation();
     const over = e.target.closest('.tab'); if (!over || +over.dataset.id === dragId) return;
@@ -195,7 +244,9 @@
     const t = tabs.find(x => x.id === +el.dataset.id);
     const canSplit = t.doc && GR.split && !GR.split.right;
     menu.innerHTML = `
-      ${canSplit ? `<button data-m="split">${icon('split')}Open in split view</button><hr>` : ''}
+      ${canSplit ? `<button data-m="split">${icon('split')}Open in split view</button>` : ''}
+      ${t.doc && D && D.tearOff ? `<button data-m="window">${icon('expand')}Move to new window</button>` : ''}
+      ${t.doc ? '<hr>' : ''}
       <button data-m="close">${icon('x')}Close tab</button>
       ${tabs.length > 1 ? `<button data-m="others">${icon('x')}Close other tabs</button>` : ''}`;
     const ar = app.getBoundingClientRect();
@@ -204,6 +255,7 @@
     menu.onclick = async ev => {
       const b = ev.target.closest('[data-m]'); if (!b) return; hideMenu();
       if (b.dataset.m === 'close') close(t);
+      if (b.dataset.m === 'window') moveToWindow(t);
       if (b.dataset.m === 'others') { for (const x of tabs.slice()) if (x !== t) await close(x); activate(t); }
       if (b.dataset.m === 'split') {
         // Like Edge: the tab moves to the right pane.

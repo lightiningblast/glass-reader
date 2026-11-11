@@ -1251,6 +1251,6 @@ if (window.desktop) {
 // Start on the Home tab unless Glass Reader was opened with a PDF (tabs.js loads after this file).
 addEventListener('DOMContentLoaded', () => {
   if (!window.desktop) { GR.tabs.home(); return; }
-  window.desktop.initialFile().then(f => f ? openPdf(new Uint8Array(f.data), f.name, null, { path: f.path }) : GR.tabs.home(), () => GR.tabs.home());
+  window.desktop.initialFile().then(f => f ? openPdf(new Uint8Array(f.data), f.name, f.seeds || null, { path: f.path }) : GR.tabs.home(), () => GR.tabs.home());
 });
 })();
