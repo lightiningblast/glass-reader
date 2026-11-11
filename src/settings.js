@@ -59,12 +59,12 @@
       <div class="sgroup">
         ${row('cpu', '#5e5ce6', 'Hardware acceleration', gpuText(), sw('hardwareAcceleration', S.hardwareAcceleration))}
         ${restartNeeded ? row('update', '#ff9f0a', 'Restart to apply', 'Graphics changes take effect after Glass Reader restarts.', `<button class="txtbtn primary" data-act="relaunch">Restart</button>`) : ''}
-        ${row('sparkle', '#0a84ff', 'Liquid glass', LG && !LG.supported ? 'Refraction needs the desktop app; a frosted look is used here.' : 'High adds rainbow light dispersion at the edges. Balanced is lighter on older graphics cards.', '')}
+        ${row('sparkle', '#0a84ff', 'Liquid glass', LG && !LG.supported ? 'Refraction needs the desktop app; a frosted look is used here.' : 'High bends light at the edges like a lens. Balanced is lighter on older graphics cards.', '')}
         <div class="srow" style="padding-top:0">${choice('glass', [['high', 'High'], ['balanced', 'Balanced'], ['off', 'Frosted only']])}</div>
       </div>
       <div class="sglabel">Motion & scrolling</div>
       <div class="sgroup">
-        ${row('scroll', '#30b0c7', 'Smooth scrolling', 'Mouse wheels glide and stretch at the ends. Trackpads keep their own feel.', sw('smoothScroll', S.smoothScroll))}
+        ${row('scroll', '#30b0c7', 'Smooth scrolling', 'Mac-style momentum for mouse wheels and trackpads, with a rubber-band stretch at the ends.', sw('smoothScroll', S.smoothScroll))}
         ${row('motion', '#8e8e93', 'Reduce motion', 'Turns off springs, stretching and zoom animations.', sw('reduceMotion', S.reduceMotion))}
       </div>
       ${D ? `<div class="sglabel">Updates</div>

@@ -187,51 +187,83 @@ document.addEventListener('pointerdown', e => {
 });
 
 /* =================== Scrolling =================== */
-// Mouse wheels glide: each notch moves a target and the view eases toward it every frame,
-// with a rubber-band stretch at the ends. Trackpads keep their native momentum.
+// Mac-style scrolling, driven by momentum physics:
+//  - Mouse wheel: each notch adds speed; spinning faster builds more (wheel acceleration).
+//  - Trackpad: the page follows your fingers exactly, then keeps gliding after you lift them.
+//  - Reversing direction stops the glide at once.
+//  - At either end the page stretches like a rubber band and springs back.
 const prefs = { smoothScroll: store.get('smoothScroll', true) };
-const glide = { y: null, x: null, py: 0, px: 0, raf: 0, last: 0, el: 0 };
-function glideStop() { cancelAnimationFrame(glide.raf); glide.raf = 0; glide.y = glide.x = null; }
-function glideTo(y, x) {
-  const maxY = viewer.scrollHeight - viewer.clientHeight, maxX = viewer.scrollWidth - viewer.clientWidth;
-  if (y != null) glide.y = Math.max(0, Math.min(maxY, y));
-  if (x != null) glide.x = Math.max(0, Math.min(maxX, x));
-  if (!glide.raf) { glide.py = viewer.scrollTop; glide.px = viewer.scrollLeft; glide.last = performance.now(); glide.raf = requestAnimationFrame(glideStep); }
+const FRICTION = 4.2; // per second: a flick glides for about half a second, like macOS
+const M = { raf: 0, last: 0, y: 0, x: 0, vy: 0, vx: 0, over: 0, touching: false, lastInput: 0, lastNotch: 0, streak: 0, samples: [] };
+const rubber = (o, d) => Math.sign(o) * (1 - 1 / (Math.abs(o) * .55 / d + 1)) * d;
+function glideStop() {
+  cancelAnimationFrame(M.raf); M.raf = 0; M.vy = M.vx = 0; M.touching = false;
+  if (M.over) { M.over = 0; pagesEl.style.removeProperty('--el'); }
 }
-function glideStep(now) {
-  const dt = Math.min(40, now - glide.last); glide.last = now;
-  const k = 1 - Math.exp(-dt / 105);
-  let moving = false;
-  if (glide.y != null) {
-    const d = glide.y - glide.py;
-    if (Math.abs(d) < .4) { glide.py = glide.y; glide.y = null; } else { glide.py += d * k; moving = true; }
-    viewer.scrollTop = glide.py;
+function mStart() {
+  if (M.raf) return;
+  M.y = M.wy = viewer.scrollTop; M.x = viewer.scrollLeft; M.last = performance.now();
+  M.raf = requestAnimationFrame(mStep);
+}
+function mStep(now) {
+  const dt = Math.min(.05, (now - M.last) / 1000); M.last = now;
+  const maxY = Math.max(0, viewer.scrollHeight - viewer.clientHeight), maxX = Math.max(0, viewer.scrollWidth - viewer.clientWidth);
+  if (M.touching && now - M.lastInput > 70) M.touching = false; // fingers lifted: momentum takes over
+  if (!M.touching) {
+    M.y += M.vy * dt; M.x += M.vx * dt;
+    const f = Math.exp(-FRICTION * dt); M.vy *= f; M.vx *= f;
   }
-  if (glide.x != null) {
-    const d = glide.x - glide.px;
-    if (Math.abs(d) < .4) { glide.px = glide.x; glide.x = null; } else { glide.px += d * k; moving = true; }
-    viewer.scrollLeft = glide.px;
+  // Past an end, the excess becomes stretch and the glide brakes hard.
+  if (M.y < 0 || M.y > maxY) {
+    const ex = M.y < 0 ? M.y : M.y - maxY;
+    M.over += ex; M.y -= ex;
+    if (!M.touching) M.vy *= Math.exp(-9 * dt);
   }
-  if (glide.el) {
-    glide.el *= Math.exp(-dt / 120);
-    if (Math.abs(glide.el) < .3) { glide.el = 0; pagesEl.style.removeProperty('--el'); }
-    else { pagesEl.style.setProperty('--el', glide.el.toFixed(2) + 'px'); moving = true; }
+  M.x = Math.max(0, Math.min(maxX, M.x));
+  if (!M.touching && M.over) {
+    M.over *= Math.exp(-11 * dt);
+    if (Math.abs(M.over) < .5) M.over = 0;
   }
-  glide.raf = moving ? requestAnimationFrame(glideStep) : 0;
+  viewer.scrollTop = M.y; viewer.scrollLeft = M.x; M.wy = viewer.scrollTop;
+  if (M.over) pagesEl.style.setProperty('--el', (-rubber(M.over, viewer.clientHeight * .5)).toFixed(2) + 'px');
+  else pagesEl.style.removeProperty('--el');
+  const moving = M.touching || Math.abs(M.vy) > 6 || Math.abs(M.vx) > 6 || M.over;
+  if (moving) M.raf = requestAnimationFrame(mStep);
+  else { M.raf = 0; M.vy = M.vx = 0; }
 }
 function wheelScroll(e) {
   if (!prefs.smoothScroll || reduceMotion) return;
-  const notch = e.deltaMode === 1 || (e.deltaMode === 0 && e.wheelDelta && Math.abs(e.wheelDelta) % 120 === 0 && Math.abs(e.deltaY || e.deltaX) >= 40);
-  if (!notch) { if (glide.raf && glide.el === 0) glideStop(); return; }
   e.preventDefault(); cancelAnimationFrame(anim);
-  let dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY, dx = e.deltaMode === 1 ? e.deltaX * 40 : e.deltaX;
+  const now = performance.now(), unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? viewer.clientHeight : 1;
+  let dy = e.deltaY * unit, dx = e.deltaX * unit;
   if (e.shiftKey && !dx) { dx = dy; dy = 0; }
-  const maxY = viewer.scrollHeight - viewer.clientHeight;
-  const base = glide.y ?? viewer.scrollTop, ty = base + dy * 1.15;
-  if (dy < 0 && viewer.scrollTop <= .5) glide.el = Math.min(80, glide.el + Math.min(28, -dy * .22));
-  else if (dy > 0 && viewer.scrollTop >= maxY - .5) glide.el = Math.max(-80, glide.el - Math.min(28, dy * .22));
-  glideTo(dy ? ty : null, dx ? (glide.x ?? viewer.scrollLeft) + dx * 1.15 : null);
-  if (glide.el && !glide.raf) { glide.last = performance.now(); glide.raf = requestAnimationFrame(glideStep); }
+  const notch = e.deltaMode !== 0 || (e.wheelDelta && Math.abs(e.wheelDelta) % 120 === 0 && Math.abs(dy || dx) >= 40);
+  mStart();
+  M.lastInput = now;
+  if (notch) {
+    // Mouse wheel: add speed. One notch travels about 130px; quick spins accelerate.
+    M.touching = false;
+    M.streak = now - M.lastNotch < 170 ? Math.min(M.streak + 1, 12) : 0; M.lastNotch = now;
+    const accel = 1 + M.streak * .3;
+    if (dy && Math.sign(dy) !== Math.sign(M.vy)) M.vy = 0;
+    if (dx && Math.sign(dx) !== Math.sign(M.vx)) M.vx = 0;
+    M.vy = Math.max(-12000, Math.min(12000, M.vy + dy * 1.3 * FRICTION * accel));
+    M.vx = Math.max(-12000, Math.min(12000, M.vx + dx * 1.3 * FRICTION * accel));
+  } else {
+    // Trackpad: follow the fingers 1:1 and measure their speed for the glide afterwards.
+    if (!M.touching) { M.vy = M.vx = 0; M.samples = []; }
+    M.touching = true;
+    if (M.over && dy && Math.sign(dy) === -Math.sign(M.over)) {
+      const left = M.over + dy;
+      if (Math.sign(left) === Math.sign(M.over)) { M.over = left; dy = 0; } else { M.over = 0; dy = left; }
+    }
+    M.y += dy; M.x += dx;
+    M.samples.push([now, dy, dx]);
+    while (M.samples.length && now - M.samples[0][0] > 90) M.samples.shift();
+    const span = Math.max(.016, (now - M.samples[0][0]) / 1000);
+    M.vy = M.samples.reduce((s, q) => s + q[1], 0) / span;
+    M.vx = M.samples.reduce((s, q) => s + q[2], 0) / span;
+  }
 }
 
 let anim = null;
@@ -260,6 +292,7 @@ function goToPage(n, smooth = true) {
 
 let lastST = 0, scrubT, scrollRaf;
 viewer.addEventListener('scroll', () => {
+  if (M.raf && !M.over && Math.abs(viewer.scrollTop - M.wy) > 3) { M.y = viewer.scrollTop; M.x = viewer.scrollLeft; M.vy = M.vx = 0; M.touching = false; } // moved by something else
   if (scrollRaf) return;
   scrollRaf = requestAnimationFrame(() => {
     scrollRaf = 0;

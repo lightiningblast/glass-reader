@@ -1,7 +1,7 @@
 {
   "name": "glass-reader",
   "productName": "Glass Reader",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A liquid-glass PDF reader for Windows",
   "author": "Glass Reader",
   "main": "main.js",

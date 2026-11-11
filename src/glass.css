@@ -1,64 +1,46 @@
 /* Liquid Glass material. Loaded after style.css and overrides its frosted look.
-   Glass is clear: little blur and a light tint. Depth comes from refraction at the rim (glass.js),
-   a light-reactive specular edge, and an inner glow along the bottom. */
-@property --la { syntax: '<angle>'; inherits: false; initial-value: 135deg; }
-@property --tx { syntax: '<length>'; inherits: false; initial-value: 0px; }
+   A soft blur with a light tint, a thin lens bend at the rim (glass.js), and one even
+   specular edge that is brighter on top, as if lit from above. Nothing follows the pointer. */
 :root{
-  --lg-tint:rgba(255,255,255,.42); --lg-tint-strong:rgba(250,251,255,.70);
-  --lg-rim:rgba(255,255,255,1); --lg-rim-soft:rgba(255,255,255,.28);
-  --lg-glow:rgba(255,255,255,.55); --lg-edge:rgba(0,0,0,.10);
-  --lg-disp-a:rgba(160,210,255,.55); --lg-disp-b:rgba(255,190,235,.5); --lg-disp-c:rgba(255,236,170,.45);
-  --lg-shadow:rgba(10,20,50,.16);
+  --lg-tint:rgba(255,255,255,.50); --lg-tint-strong:rgba(250,251,255,.74);
+  --lg-rim-top:rgba(255,255,255,.95); --lg-rim-side:rgba(255,255,255,.35); --lg-rim-bottom:rgba(255,255,255,.55);
+  --lg-sheen:rgba(255,255,255,.22); --lg-edge:rgba(0,0,0,.07);
+  --lg-shadow:rgba(10,20,50,.12);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --lg-tint:rgba(30,32,40,.48); --lg-tint-strong:rgba(32,34,44,.76);
-  --lg-rim:rgba(255,255,255,.62); --lg-rim-soft:rgba(255,255,255,.10);
-  --lg-glow:rgba(255,255,255,.10); --lg-edge:rgba(255,255,255,.06);
-  --lg-disp-a:rgba(120,180,255,.40); --lg-disp-b:rgba(255,140,210,.34); --lg-disp-c:rgba(255,220,140,.28);
-  --lg-shadow:rgba(0,0,0,.5);
+  --lg-tint:rgba(36,38,46,.58); --lg-tint-strong:rgba(34,36,44,.80);
+  --lg-rim-top:rgba(255,255,255,.30); --lg-rim-side:rgba(255,255,255,.08); --lg-rim-bottom:rgba(255,255,255,.12);
+  --lg-sheen:rgba(255,255,255,.06); --lg-edge:rgba(0,0,0,.35);
+  --lg-shadow:rgba(0,0,0,.45);
 }}
 :root[data-theme="dark"]{
-  --lg-tint:rgba(30,32,40,.48); --lg-tint-strong:rgba(32,34,44,.76);
-  --lg-rim:rgba(255,255,255,.62); --lg-rim-soft:rgba(255,255,255,.10);
-  --lg-glow:rgba(255,255,255,.10); --lg-edge:rgba(255,255,255,.06);
-  --lg-disp-a:rgba(120,180,255,.40); --lg-disp-b:rgba(255,140,210,.34); --lg-disp-c:rgba(255,220,140,.28);
-  --lg-shadow:rgba(0,0,0,.5);
+  --lg-tint:rgba(36,38,46,.58); --lg-tint-strong:rgba(34,36,44,.80);
+  --lg-rim-top:rgba(255,255,255,.30); --lg-rim-side:rgba(255,255,255,.08); --lg-rim-bottom:rgba(255,255,255,.12);
+  --lg-sheen:rgba(255,255,255,.06); --lg-edge:rgba(0,0,0,.35);
+  --lg-shadow:rgba(0,0,0,.45);
 }
+@property --tx { syntax: '<length>'; inherits: false; initial-value: 0px; }
 
 .glass{
   background:var(--lg-tint);
-  -webkit-backdrop-filter:blur(16px) saturate(1.8);backdrop-filter:blur(16px) saturate(1.8);
-  box-shadow:
-    inset 0 0 0 .5px var(--lg-rim-soft),
-    inset 0 -14px 22px -16px var(--lg-glow),
-    inset 0 10px 18px -14px var(--lg-glow),
-    0 0 0 .5px var(--lg-edge),
-    0 10px 30px -10px var(--lg-shadow),
-    0 2px 6px -2px var(--lg-shadow);
-  will-change:transform;
+  -webkit-backdrop-filter:blur(18px) saturate(1.7);backdrop-filter:blur(18px) saturate(1.7);
+  box-shadow:0 0 0 .5px var(--lg-edge),0 6px 22px -8px var(--lg-shadow),0 1px 3px -1px var(--lg-shadow);
   transform:translateZ(0);
 }
-/* Clear glass once refraction is live; a little more tint where text sits on it. */
-.glass.lg-live{background:var(--lg-tint)}
-.panel.glass.lg-live,.pop.glass.lg-live{background:var(--lg-tint-strong)}
+.panel.glass,.pop.glass{background:var(--lg-tint-strong)}
 html[data-glass="off"] .glass{background:var(--lg-tint-strong)}
 
-/* Specular rim: bright where it faces the light (the pointer), with a faint dispersion fringe. */
+/* One even specular rim: bright along the top, faint on the sides, a soft return at the bottom. */
 .glass::before{
-  content:"";position:absolute;inset:0;border-radius:inherit;padding:1.25px;pointer-events:none;z-index:2;
-  background:conic-gradient(from var(--la),
-    var(--lg-rim) 0deg, var(--lg-rim-soft) 50deg, var(--lg-disp-a) 80deg, transparent 120deg,
-    transparent 150deg, var(--lg-disp-b) 175deg, var(--lg-rim-soft) 190deg, var(--lg-disp-c) 205deg,
-    transparent 240deg, transparent 290deg, var(--lg-rim-soft) 320deg, var(--lg-rim) 360deg);
-  opacity:calc(.55 + var(--li,.6) * .45);
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;z-index:2;
+  background:linear-gradient(180deg,var(--lg-rim-top) 0%,var(--lg-rim-side) 35%,var(--lg-rim-side) 70%,var(--lg-rim-bottom) 100%);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
-  transition:opacity .4s;
 }
-/* Soft specular bloom that follows the pointer across the surface. */
+/* A still sheen on the upper half. */
 .glass::after{
   content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
-  background:radial-gradient(180px 120px at var(--mx,30%) var(--my,-40%),rgba(255,255,255,calc(var(--li,.6) * .22)),transparent 70%);
+  background:linear-gradient(180deg,var(--lg-sheen),transparent 55%);
 }
 
 /* ---------- Motion: springs, compositor-only properties ---------- */

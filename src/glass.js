@@ -56,7 +56,7 @@
   function filterMarkup(it, url) {
     const { w, h } = it;
     const big = w * h > 150000;
-    const chroma = quality === 'high' && !big;
+    const chroma = false; // color splitting smeared text behind the glass; kept off
     const s = it.strength, blur = it.blur;
     const img = `<feImage href="${url}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="map"/>`;
     const base = `<feGaussianBlur in="SourceGraphic" stdDeviation="${blur}" result="soft"/>`;
@@ -77,7 +77,7 @@
     const cs = getComputedStyle(it.el);
     const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, w / 2, h / 2);
     it.w = w; it.h = h;
-    const bezel = Math.max(6, Math.min(it.bezel || 14, radius || 14, Math.min(w, h) * .32));
+    const bezel = Math.max(5, Math.min(it.bezel || 9, radius || 9, Math.min(w, h) * .22));
     const url = makeMap(w, h, Math.round(radius), Math.round(bezel));
     let f = it.filter;
     if (!f) {
@@ -121,8 +121,8 @@
     const ds = el.dataset;
     const it = {
       el, id: 'lg' + (++uid),
-      strength: +ds.lgStrength || 26, bezel: +ds.lgBezel || 14,
-      blur: ds.lgBlur != null ? +ds.lgBlur : 2.2, saturate: +ds.lgSaturate || 1.75
+      strength: Math.min(+ds.lgStrength || 14, 14), bezel: +ds.lgBezel || 9,
+      blur: ds.lgBlur != null ? +ds.lgBlur : 8, saturate: +ds.lgSaturate || 1.6
     };
     items.set(el, it);
     ro.observe(el);
@@ -135,22 +135,6 @@
   new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) scan(n); })
     .observe(document.body, { childList: true, subtree: true });
 
-  /* Light: the rim highlight turns toward the pointer, like a light source moving over glass. */
-  let lx = innerWidth * .3, ly = -200, lraf = 0;
-  addEventListener('pointermove', e => { lx = e.clientX; ly = e.clientY; if (!lraf) lraf = requestAnimationFrame(light); }, { passive: true });
-  function light() {
-    lraf = 0;
-    for (const it of items.values()) {
-      const r = it.el.getBoundingClientRect(); if (!r.width) continue;
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const a = Math.atan2(ly - cy, lx - cx) * 180 / Math.PI + 90;
-      const dist = Math.hypot(lx - cx, ly - cy) - Math.max(r.width, r.height) / 2;
-      it.el.style.setProperty('--la', a.toFixed(1) + 'deg');
-      it.el.style.setProperty('--li', Math.max(.45, Math.min(1, 1 - dist / 700)).toFixed(2));
-      it.el.style.setProperty('--mx', (lx - r.left).toFixed(0) + 'px');
-      it.el.style.setProperty('--my', (ly - r.top).toFixed(0) + 'px');
-    }
-  }
 
   window.LiquidGlass = {
     get supported() { return supported; },
@@ -165,5 +149,4 @@
   };
   document.documentElement.dataset.glass = supported ? quality : 'off';
   scan();
-  requestAnimationFrame(light);
 })();
