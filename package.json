@@ -1,7 +1,7 @@
 {
   "name": "glass-reader",
   "productName": "Glass Reader",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "A liquid-glass PDF reader for Windows",
   "author": "Glass Reader",
   "main": "main.js",
@@ -65,6 +65,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.11",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174"
   },
   "devDependencies": {

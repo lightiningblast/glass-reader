@@ -1,4 +1,4 @@
-// Glass Reader — Electron main process: window, file opening, Windows 11 integration, auto-updates.
+// Glass Reader — Electron main process: window, files, settings, GPU, Windows 11 integration, silent updates.
 const { app, BrowserWindow, ipcMain, nativeTheme, shell, dialog, systemPreferences, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -9,9 +9,25 @@ const BUILD = process.platform === 'win32' ? parseInt(os.release().split('.')[2]
 const IS_WIN11 = BUILD >= 22000;
 const HAS_MICA = BUILD >= 22621;
 
-app.setAppUserModelId('com.glassreader.app'); // taskbar grouping and jump list
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
+/* ---------- Settings (read before the app starts: GPU flags must be set early) ---------- */
+const DEFAULTS = { hardwareAcceleration: true, autoUpdate: true, smoothScroll: true, glass: 'high', reduceMotion: false };
+const settingsFile = path.join(app.getPath('userData'), 'settings.json');
+let settings = { ...DEFAULTS };
+try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) }; } catch {}
+function saveSettings() { try { fs.mkdirSync(path.dirname(settingsFile), { recursive: true }); fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2)); } catch {} }
+
+app.setAppUserModelId('com.glassreader.app');
+if (settings.hardwareAcceleration) {
+  // Draw pages, canvases and glass on the graphics card, even on drivers Chromium is unsure about.
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('enable-zero-copy');
+  app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
+  app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization,UseSkiaRenderer');
+  app.commandLine.appendSwitch('force_high_performance_gpu');
+} else {
+  app.disableHardwareAcceleration();
+}
 
 let win = null;
 let pendingFile = findPdfArg(process.argv);
@@ -68,7 +84,6 @@ function createWindow() {
     show: false,
     title: 'Glass Reader',
     icon: path.join(__dirname, 'build', 'icon.png'),
-    // Mica lets the desktop wallpaper tint the window, like built-in Windows 11 apps.
     backgroundMaterial: HAS_MICA ? 'mica' : undefined,
     backgroundColor: HAS_MICA ? '#00000000' : (dark ? '#0d0e12' : '#e6e9f0'),
     titleBarStyle: 'hidden',
@@ -79,6 +94,7 @@ function createWindow() {
       sandbox: true,
       nodeIntegration: false,
       spellcheck: false,
+      backgroundThrottling: false,
       additionalArguments: [`--gr-mica=${HAS_MICA ? 1 : 0}`, `--gr-win11=${IS_WIN11 ? 1 : 0}`]
     }
   });
@@ -90,7 +106,6 @@ function createWindow() {
   });
   win.on('close', saveBounds);
 
-  // Links open in the default browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -101,10 +116,10 @@ function createWindow() {
   setupUpdates();
 }
 
-/* ---------- Opening files ---------- */
+/* ---------- Opening and saving files ---------- */
 function readPdf(file) {
   const data = fs.readFileSync(file);
-  app.addRecentDocument(file); // shows under "Recent" in the taskbar jump list
+  app.addRecentDocument(file);
   return { name: path.basename(file, path.extname(file)), data };
 }
 function sendFile(file) {
@@ -113,11 +128,7 @@ function sendFile(file) {
 }
 async function openDialog() {
   if (!win) return;
-  const r = await dialog.showOpenDialog(win, {
-    title: 'Open PDF',
-    filters: [{ name: 'PDF documents', extensions: ['pdf'] }],
-    properties: ['openFile']
-  });
+  const r = await dialog.showOpenDialog(win, { title: 'Open PDF', filters: [{ name: 'PDF documents', extensions: ['pdf'] }], properties: ['openFile'] });
   if (!r.canceled && r.filePaths[0]) sendFile(r.filePaths[0]);
 }
 function setJumpList() {
@@ -125,12 +136,30 @@ function setJumpList() {
   app.setUserTasks([{
     program: process.execPath,
     arguments: app.isPackaged ? '--open-dialog' : `"${app.getAppPath()}" --open-dialog`,
-    iconPath: process.execPath,
-    iconIndex: 0,
-    title: 'Open PDF…',
-    description: 'Choose a PDF to open'
+    iconPath: process.execPath, iconIndex: 0,
+    title: 'Open PDF…', description: 'Choose a PDF to open'
   }]);
 }
+const safeName = n => String(n).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 180);
+
+ipcMain.handle('save-file', async (_e, name, data) => {
+  const ext = path.extname(name).slice(1).toLowerCase() || 'pdf';
+  const r = await dialog.showSaveDialog(win, {
+    title: 'Save', defaultPath: path.join(app.getPath('documents'), safeName(name)),
+    filters: [{ name: ext.toUpperCase() + ' file', extensions: [ext] }]
+  });
+  if (r.canceled || !r.filePath) return null;
+  fs.writeFileSync(r.filePath, Buffer.from(data));
+  if (ext === 'pdf') app.addRecentDocument(r.filePath);
+  return path.basename(r.filePath);
+});
+ipcMain.handle('save-files', async (_e, files) => {
+  const r = await dialog.showOpenDialog(win, { title: 'Choose a folder to save into', defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  for (const f of files) fs.writeFileSync(path.join(r.filePaths[0], safeName(f.name)), Buffer.from(f.data));
+  shell.openPath(r.filePaths[0]);
+  return path.basename(r.filePaths[0]);
+});
 
 ipcMain.handle('initial-file', () => {
   if (!pendingFile) return null;
@@ -143,7 +172,7 @@ ipcMain.handle('accent', () => { try { return systemPreferences.getAccentColor()
 
 ipcMain.on('theme', (_e, mode) => {
   if (!win) return;
-  nativeTheme.themeSource = mode === 'light' || mode === 'dark' ? mode : 'system'; // also tints Mica
+  nativeTheme.themeSource = mode === 'light' || mode === 'dark' ? mode : 'system';
   const dark = nativeTheme.shouldUseDarkColors;
   win.setTitleBarOverlay(overlayColors(dark));
   if (!HAS_MICA) win.setBackgroundColor(dark ? '#0d0e12' : '#e6e9f0');
@@ -152,29 +181,52 @@ nativeTheme.on('updated', () => {
   if (win && nativeTheme.themeSource === 'system') win.setTitleBarOverlay(overlayColors(nativeTheme.shouldUseDarkColors));
 });
 
-/* ---------- Auto-updates (GitHub Releases) ---------- */
-ipcMain.on('restart-to-update', () => {
-  const { autoUpdater } = require('electron-updater');
-  autoUpdater.quitAndInstall(false, true);
+/* ---------- Settings and GPU status ---------- */
+ipcMain.handle('get-settings', () => settings);
+ipcMain.on('set-setting', (_e, k, v) => {
+  if (!(k in DEFAULTS)) return;
+  settings[k] = v; saveSettings();
+  if (k === 'autoUpdate') setupUpdates();
 });
+ipcMain.handle('gpu-info', async () => {
+  const status = app.getGPUFeatureStatus();
+  let renderer = '';
+  try { const info = await app.getGPUInfo('complete'); renderer = (info.auxAttributes && info.auxAttributes.glRenderer) || ''; } catch {}
+  const active = settings.hardwareAcceleration && /^enabled/.test(status.gpu_compositing || '') && /^enabled/.test(status.rasterization || '');
+  return { active, renderer, status };
+});
+ipcMain.on('relaunch', () => { app.relaunch(); app.exit(0); });
+ipcMain.on('open-default-apps', () => shell.openExternal('ms-settings:defaultapps'));
 ipcMain.handle('app-version', () => app.getVersion());
 
+/* ---------- Silent background updates (GitHub Releases) ----------
+   Updates download quietly. They install silently (no setup window) when the app closes,
+   or right away if you choose "Restart now". */
+let updater = null, updateTimer = null;
+const sendStatus = s => win && !win.isDestroyed() && win.webContents.send('update-status', s);
 function setupUpdates() {
-  if (!app.isPackaged) return; // updates only run in the installed app
-  const { autoUpdater } = require('electron-updater');
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on('download-progress', p => win && win.setProgressBar(p.percent / 100));
-  autoUpdater.on('update-downloaded', info => {
-    if (!win) return;
-    win.setProgressBar(-1);
-    win.webContents.send('update-ready', info.version);
-    if (!win.isFocused()) win.flashFrame(true);
-  });
-  autoUpdater.on('error', () => { if (win) win.setProgressBar(-1); }); // offline or no release yet
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  if (!app.isPackaged) return;
+  if (!updater) {
+    updater = require('electron-updater').autoUpdater;
+    updater.autoDownload = true;
+    updater.autoInstallOnAppQuit = true;
+    updater.on('checking-for-update', () => sendStatus({ state: 'checking' }));
+    updater.on('update-available', i => sendStatus({ state: 'downloading', version: i.version }));
+    updater.on('update-not-available', () => sendStatus({ state: 'none' }));
+    updater.on('download-progress', p => { win && win.setProgressBar(p.percent / 100); sendStatus({ state: 'downloading', percent: p.percent }); });
+    updater.on('update-downloaded', i => {
+      if (win) { win.setProgressBar(-1); if (!win.isFocused()) win.flashFrame(true); }
+      sendStatus({ state: 'ready', version: i.version });
+    });
+    updater.on('error', () => { win && win.setProgressBar(-1); sendStatus({ state: 'error' }); });
+  }
+  clearInterval(updateTimer);
+  if (!settings.autoUpdate) return;
+  const check = () => updater.checkForUpdates().catch(() => {});
   setTimeout(check, 4000);
-  setInterval(check, 4 * 60 * 60 * 1000);
+  updateTimer = setInterval(check, 4 * 60 * 60 * 1000);
 }
+ipcMain.on('check-updates', () => { if (!app.isPackaged) { sendStatus({ state: 'none' }); return; } setupUpdates(); updater && updater.checkForUpdates().catch(() => sendStatus({ state: 'error' })); });
+ipcMain.on('restart-to-update', () => { if (updater) updater.quitAndInstall(true, true); }); // silent install, then reopen
 
 app.on('window-all-closed', () => app.quit());
