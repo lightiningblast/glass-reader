@@ -37,7 +37,11 @@
   function gpuText() {
     if (!D) return 'Your browser decides how pages are drawn.';
     if (!gpu) return 'Checking your graphics card…';
-    const name = gpu.renderer ? gpu.renderer.replace(/^ANGLE \(|\)$/g, '').split(',').slice(0, 2).join(' ·').trim() : 'Graphics card';
+    // "ANGLE (Intel, Intel(R) Graphics (0x7D45) Direct3D11 vs_5_0 ps_5_0, D3D11-…)" → "Intel(R) Graphics · Direct3D 11"
+    const r = gpu.renderer || '', parts = r.replace(/^ANGLE \(|\)$/g, '').split(',').map(s => s.trim());
+    const api = /Direct3D11|D3D11/.test(r) ? 'Direct3D 11' : /Direct3D12|D3D12/.test(r) ? 'Direct3D 12' : /Vulkan/i.test(r) ? 'Vulkan' : /OpenGL/i.test(r) ? 'OpenGL' : '';
+    const card = (parts[1] || parts[0] || 'Graphics card').replace(/\(0x[0-9a-f]+\)/ig, '').replace(/Direct3D1[12]|vs_\d_\d|ps_\d_\d|D3D1[12]\S*/g, '').replace(/\s+/g, ' ').trim() || 'Graphics card';
+    const name = card + (api ? ' · ' + api : '');
     if (!S.hardwareAcceleration) return `<span class="warn">Off. Pages and glass are drawn by the processor.</span>`;
     return gpu.active ? `<span class="good">Active</span> · ${name}` : `<span class="warn">Not available on this graphics driver.</span> Try updating it.`;
   }

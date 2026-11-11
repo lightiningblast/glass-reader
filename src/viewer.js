@@ -540,8 +540,9 @@ function sizeThumbs() {
 }
 
 /* =================== Loading =================== */
-async function openPdf(data, name, seeds) {
-  const id = ++state.loadId;
+// A document is parsed once (loadDoc) and can then be shown any number of times (showDoc),
+// which is what lets each tab keep its own PDF, zoom, scroll position and undo history.
+async function loadDoc(data, name, seeds, meta = {}) {
   loader(true, 'Opening ' + (name || 'document') + '…');
   closePops();
   const original = data.slice(); // pdf.js takes ownership of `data`; the tools need the original bytes
@@ -551,22 +552,39 @@ async function openPdf(data, name, seeds) {
   try { pdf = await task.promise; }
   catch (e) {
     loader(false);
-    if (e && e.name === 'PasswordException') return;
+    if (e && e.name === 'PasswordException') return null;
     toast(e && e.name === 'InvalidPDFException' ? 'That file isn’t a valid PDF. Try another one.' : 'This PDF couldn’t be opened. Try another file.');
-    return;
+    return null;
   }
-  if (id !== state.loadId) { pdf.destroy(); return; }
   hidePassword();
-  const old = state.pdf; state.pdf = pdf; state.bytes = original; state.name = name || 'Document';
-  if (old) old.destroy().catch(() => {});
+  let title = name;
+  try { const md = await pdf.getMetadata(); if (md && md.info && md.info.Title && md.info.Title.trim()) title = md.info.Title.trim(); } catch {}
+  loader(false);
+  return { pdf, bytes: original, name: name || 'Document', title: title || name || 'Untitled', seeds, path: meta.path || null };
+}
+function captureView() {
+  if (!state.pdf || !state.pages.length) return null;
+  return { zoom: state.zoom, fit: state.fit, rotation: state.rotation, anchor: getAnchor(), undo: state.undo, redo: state.redo };
+}
+function clearDoc() {
+  ++state.loadId;
+  if (state.notePopFor) closeNote();
   io && io.disconnect(); tio && tio.disconnect(); visible.clear(); thumbQ.clear();
-  pagesEl.replaceChildren(); $('#thumbs').replaceChildren();
-  state.pages = []; state.rotation = 0; state.undo = []; state.redo = []; updateUndo();
+  pagesEl.replaceChildren(); $('#thumbs').replaceChildren(); $('#outline').replaceChildren();
+  state.pdf = null; state.pages = []; state.bytes = null; state.doc = null;
+}
+async function showDoc(doc, view) {
+  clearDoc();
+  const id = state.loadId, pdf = doc.pdf;
+  closePops();
+  state.pdf = pdf; state.bytes = doc.bytes; state.name = doc.name; state.doc = doc;
+  state.rotation = view ? view.rotation : 0;
+  state.undo = view ? view.undo : []; state.redo = view ? view.redo : []; updateUndo();
   state.search.matches = []; state.search.idx = -1; $('#searchCount').textContent = '';
   state.fp = pdf.fingerprints[0];
   const saved = store.get('annots:' + state.fp, null);
   state.annots = saved || {};
-  if (!saved && seeds) for (const s of seeds) (state.annots[s.page] ||= []).push(s.item);
+  if (!saved && doc.seeds) for (const s of doc.seeds) (state.annots[s.page] ||= []).push(s.item);
 
   const pages = await Promise.all(Array.from({ length: pdf.numPages }, (_, i) => pdf.getPage(i + 1)));
   if (id !== state.loadId) return;
@@ -582,28 +600,33 @@ async function openPdf(data, name, seeds) {
   });
   pagesEl.append(frag); $('#thumbs').append(tfrag);
   sizeThumbs();
-  state.current = 0; state.zoom = 1;
-  state.fit = 'auto'; state.zoom = fitZoom('auto');
-  layout(null); viewer.scrollTop = 0; viewer.scrollLeft = 0; updateCurrent();
+  state.current = 0;
+  if (view) { state.fit = view.fit; state.zoom = view.fit ? fitZoom(view.fit) : view.zoom; }
+  else { state.fit = 'auto'; state.zoom = fitZoom('auto'); }
+  layout(null);
+  if (view && view.anchor) restoreAnchor(view.anchor); else { viewer.scrollTop = 0; viewer.scrollLeft = 0; }
+  updateCurrent();
   $('#pageTotal').textContent = pdf.numPages;
   io = new IntersectionObserver(es => { for (const e of es) { const i = +e.target.dataset.i; e.isIntersecting ? visible.add(i) : visible.delete(i); } scheduleRender(); }, { root: viewer, rootMargin: '120% 40%' });
   state.pages.forEach(p => io.observe(p.el));
   tio = new IntersectionObserver(es => { for (const e of es) if (e.isIntersecting) thumbQ.add(state.pages[+e.target.dataset.i]); thumbPump(); }, { root: $('#thumbs'), rootMargin: '200px' });
   state.pages.forEach((p, i) => { p.thumb.dataset.i = i; tio.observe(p.thumb); });
-
-  let title = name;
-  try { const md = await pdf.getMetadata(); if (md && md.info && md.info.Title && md.info.Title.trim()) title = md.info.Title.trim(); } catch {}
-  $('#docTitle').textContent = title || 'Untitled'; document.title = 'Glass Reader';
+  $('#docTitle').textContent = doc.title;
   buildOutline(pdf, id);
-  loader(false);
   if (state.search.q) runSearch(state.search.q);
 }
+// Opening a PDF goes through the tabs (a new tab, or the Home tab it was opened from).
+async function openPdf(data, name, seeds, meta) {
+  if (window.GR && GR.tabs) return GR.tabs.open(data, name, seeds, meta);
+  const doc = await loadDoc(data, name, seeds, meta); if (doc) await showDoc(doc);
+}
+
 function openFile(file) {
   if (!file) return;
   if (!/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) { toast('Only PDF files can be opened here.'); return; }
-  if (window.desktop) window.desktop.addRecent(file);
+  const path = window.desktop ? window.desktop.pathFor(file) : null;
   const r = new FileReader();
-  r.onload = () => openPdf(new Uint8Array(r.result), file.name.replace(/\.pdf$/i, ''));
+  r.onload = () => openPdf(new Uint8Array(r.result), file.name.replace(/\.pdf$/i, ''), null, { path });
   r.onerror = () => toast('The file couldn’t be read. Try again.');
   r.readAsArrayBuffer(file);
 }
@@ -1142,7 +1165,7 @@ let dragDepth = 0;
 addEventListener('dragenter', e => { if (![...(e.dataTransfer?.types || [])].includes('Files')) return; e.preventDefault(); dragDepth++; $('#dropZone').classList.add('show'); });
 addEventListener('dragover', e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
 addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('#dropZone').classList.remove('show'); } });
-addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('#dropZone').classList.remove('show'); const f = e.dataTransfer?.files?.[0]; if (f) openFile(f); });
+addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('#dropZone').classList.remove('show'); [...(e.dataTransfer?.files || [])].forEach(openFile); });
 
 /* Keyboard */
 document.addEventListener('keydown', e => {
@@ -1200,7 +1223,8 @@ if (window.desktop) {
 
 // Shared with tools.js and settings.js.
 window.GR = {
-  state, prefs, CSS_UNITS, toast, loader, openPdf, getText, closePops, setTool, redraw, list, textBox,
+  state, prefs, CSS_UNITS, toast, loader, openPdf, loadDoc, showDoc, captureView, clearDoc, openFile, buildSample,
+  chooseFile: () => chooseFile(), relayout: () => { if (state.pages.length) layout(getAnchor()); }, getText, closePops, setTool, redraw, list, textBox,
   get reduceMotion() { return reduceMotion; },
   setReduceMotion(v) { reduceMotion = v || matchMedia('(prefers-reduced-motion: reduce)').matches; document.documentElement.classList.toggle('reduce-motion', !!v); },
   openSample
@@ -1217,7 +1241,11 @@ if (!window.pdfjsLib) {
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
 if (window.desktop) {
   const d = window.desktop;
-  d.onOpenFile(f => openPdf(new Uint8Array(f.data), f.name));
-  d.initialFile().then(f => f ? openPdf(new Uint8Array(f.data), f.name) : openSample(), openSample);
-} else openSample();
+  d.onOpenFile(f => openPdf(new Uint8Array(f.data), f.name, null, { path: f.path }));
+}
+// Start on the Home tab unless Glass Reader was opened with a PDF (tabs.js loads after this file).
+addEventListener('DOMContentLoaded', () => {
+  if (!window.desktop) { GR.tabs.home(); return; }
+  window.desktop.initialFile().then(f => f ? openPdf(new Uint8Array(f.data), f.name, null, { path: f.path }) : GR.tabs.home(), () => GR.tabs.home());
+});
 })();

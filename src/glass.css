@@ -2,19 +2,19 @@
    A soft blur with a light tint, a thin lens bend at the rim (glass.js), and one even
    specular edge that is brighter on top, as if lit from above. Nothing follows the pointer. */
 :root{
-  --lg-tint:rgba(255,255,255,.50); --lg-tint-strong:rgba(250,251,255,.74);
+  --lg-tint:rgba(255,255,255,.34); --lg-tint-strong:rgba(250,251,255,.66);
   --lg-rim-top:rgba(255,255,255,.95); --lg-rim-side:rgba(255,255,255,.35); --lg-rim-bottom:rgba(255,255,255,.55);
   --lg-sheen:rgba(255,255,255,.22); --lg-edge:rgba(0,0,0,.07);
   --lg-shadow:rgba(10,20,50,.12);
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --lg-tint:rgba(36,38,46,.58); --lg-tint-strong:rgba(34,36,44,.80);
+  --lg-tint:rgba(36,38,46,.42); --lg-tint-strong:rgba(34,36,44,.72);
   --lg-rim-top:rgba(255,255,255,.30); --lg-rim-side:rgba(255,255,255,.08); --lg-rim-bottom:rgba(255,255,255,.12);
   --lg-sheen:rgba(255,255,255,.06); --lg-edge:rgba(0,0,0,.35);
   --lg-shadow:rgba(0,0,0,.45);
 }}
 :root[data-theme="dark"]{
-  --lg-tint:rgba(36,38,46,.58); --lg-tint-strong:rgba(34,36,44,.80);
+  --lg-tint:rgba(36,38,46,.42); --lg-tint-strong:rgba(34,36,44,.72);
   --lg-rim-top:rgba(255,255,255,.30); --lg-rim-side:rgba(255,255,255,.08); --lg-rim-bottom:rgba(255,255,255,.12);
   --lg-sheen:rgba(255,255,255,.06); --lg-edge:rgba(0,0,0,.35);
   --lg-shadow:rgba(0,0,0,.45);
@@ -23,7 +23,7 @@
 
 .glass{
   background:var(--lg-tint);
-  -webkit-backdrop-filter:blur(18px) saturate(1.7);backdrop-filter:blur(18px) saturate(1.7);
+  -webkit-backdrop-filter:blur(12px) saturate(1.9);backdrop-filter:blur(12px) saturate(1.9);
   box-shadow:0 0 0 .5px var(--lg-edge),0 6px 22px -8px var(--lg-shadow),0 1px 3px -1px var(--lg-shadow);
   transform:translateZ(0);
 }

@@ -77,7 +77,7 @@
     const cs = getComputedStyle(it.el);
     const radius = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, w / 2, h / 2);
     it.w = w; it.h = h;
-    const bezel = Math.max(5, Math.min(it.bezel || 9, radius || 9, Math.min(w, h) * .22));
+    const bezel = Math.max(6, Math.min(it.bezel || 14, radius || 14, Math.min(w, h) * .3));
     const url = makeMap(w, h, Math.round(radius), Math.round(bezel));
     let f = it.filter;
     if (!f) {
@@ -121,8 +121,8 @@
     const ds = el.dataset;
     const it = {
       el, id: 'lg' + (++uid),
-      strength: Math.min(+ds.lgStrength || 14, 14), bezel: +ds.lgBezel || 9,
-      blur: ds.lgBlur != null ? +ds.lgBlur : 8, saturate: +ds.lgSaturate || 1.6
+      strength: (+ds.lgStrength || 22) * 1.35, bezel: +ds.lgBezel || 14,
+      blur: ds.lgBlur != null ? +ds.lgBlur : 5, saturate: +ds.lgSaturate || 1.9
     };
     items.set(el, it);
     ro.observe(el);
@@ -132,7 +132,10 @@
     if (root.classList && root.classList.contains('glass')) attach(root);
     root.querySelectorAll && root.querySelectorAll('.glass').forEach(attach);
   }
-  new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) scan(n); })
+  new MutationObserver(ms => {
+    for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) scan(n);
+    for (const [el, it] of items) if (!el.isConnected) { ro.unobserve(el); if (it.filter) it.filter.remove(); clearTimeout(it.t); items.delete(el); }
+  })
     .observe(document.body, { childList: true, subtree: true });
 
 

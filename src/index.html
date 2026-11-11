@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="glass.css">
 <link rel="stylesheet" href="tools.css">
+<link rel="stylesheet" href="tabs.css">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -53,11 +54,28 @@
   <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.5l1.7 4.9a3 3 0 0 0 1.9 1.9l4.9 1.7-4.9 1.7a3 3 0 0 0-1.9 1.9L12 20.5l-1.7-4.9a3 3 0 0 0-1.9-1.9L3.5 12l4.9-1.7a3 3 0 0 0 1.9-1.9z"/></symbol>
   <symbol id="i-scroll" viewBox="0 0 24 24"><rect x="7" y="3.6" width="10" height="16.8" rx="5"/><path d="M12 7.4v3"/></symbol>
   <symbol id="i-update" viewBox="0 0 24 24"><path d="M12 3.6v9.8M8.4 10l3.6 3.6 3.6-3.6"/><path d="M4.6 15.4v1.9a2.6 2.6 0 0 0 2.6 2.6h9.6a2.6 2.6 0 0 0 2.6-2.6v-1.9"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.2 10.6 12 4.3l7.8 6.3"/><path d="M6.2 9.1v9.2a1.7 1.7 0 0 0 1.7 1.7h2.7v-5.3a1.4 1.4 0 0 1 1.4-1.4 1.4 1.4 0 0 1 1.4 1.4V20h2.7a1.7 1.7 0 0 0 1.7-1.7V9.1"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.1"/><path d="M12 7.4V12l3.1 2"/></symbol>
   <symbol id="i-motion" viewBox="0 0 24 24"><circle cx="15" cy="12" r="5"/><path d="M3.5 9h4M3.5 12h3M3.5 15h4"/></symbol>
 </svg>
 
 <div id="app" class="t-select side-open">
   <div class="ambient"></div>
+  <div id="tabstrip"><div id="tabs" role="tablist" aria-label="Open documents"></div><button class="tab-new" id="tabNew" title="New tab (Ctrl T)" aria-label="New tab"><svg class="i"><use href="#i-plus"/></svg></button></div>
+
+  <section id="home" hidden>
+    <nav class="hnav glass panel" aria-label="Home menu" data-lg-strength="20">
+      <div class="hbrand"><img src="icon.png" alt=""><b>Glass Reader</b></div>
+      <button class="hitem on" data-view="home"><svg class="i"><use href="#i-home"/></svg>Home</button>
+      <button class="hitem" data-view="recent"><svg class="i"><use href="#i-clock"/></svg>Recent</button>
+      <span class="hdiv"></span>
+      <button class="hitem" data-act="open"><svg class="i"><use href="#i-folder"/></svg>Open file…</button>
+      <button class="hitem" data-act="sample"><svg class="i"><use href="#i-doc"/></svg>Sample guide</button>
+      <span class="hgrow"></span>
+      <button class="hitem" data-act="settings"><svg class="i"><use href="#i-gear"/></svg>Settings</button>
+    </nav>
+    <div class="hmain"></div>
+  </section>
   <main id="viewer" tabindex="-1" aria-label="Document"><div id="pages"></div></main>
 
   <header id="topbar">
@@ -162,6 +180,7 @@
 <script src="vendor/pdf-lib.min.js"></script>
 <script src="glass.js"></script>
 <script src="viewer.js"></script>
+<script src="tabs.js"></script>
 <script src="tools.js"></script>
 <script src="settings.js"></script>
 </body>

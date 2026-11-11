@@ -1,5 +1,5 @@
 // Glass Reader — Electron main process: window, files, settings, GPU, Windows 11 integration, silent updates.
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, dialog, systemPreferences, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, dialog, systemPreferences, screen, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -50,6 +50,7 @@ if (!app.requestSingleInstanceLock()) {
     else if (argv.includes('--open-dialog')) openDialog();
   });
   app.whenReady().then(() => {
+    Menu.setApplicationMenu(null); // no hidden menu: Ctrl+W closes a tab, not the window
     setJumpList();
     createWindow();
   });
@@ -71,7 +72,7 @@ function saveBounds() {
 }
 
 function overlayColors(dark) {
-  return { color: '#00000000', symbolColor: dark ? '#f5f5f7' : '#1c1c1e', height: 44 };
+  return { color: '#00000000', symbolColor: dark ? '#f5f5f7' : '#1c1c1e', height: 42 };
 }
 
 function createWindow() {
@@ -120,16 +121,35 @@ function createWindow() {
 function readPdf(file) {
   const data = fs.readFileSync(file);
   app.addRecentDocument(file);
-  return { name: path.basename(file, path.extname(file)), data };
+  touchRecent(file, {});
+  return { name: path.basename(file, path.extname(file)), data, path: file };
 }
+
+/* ---------- Recent files (shown on the Home page) ---------- */
+const recentsFile = path.join(app.getPath('userData'), 'recents.json');
+let recents = [];
+try { recents = JSON.parse(fs.readFileSync(recentsFile, 'utf8')); } catch {}
+function saveRecents() { try { fs.writeFileSync(recentsFile, JSON.stringify(recents)); } catch {} }
+function touchRecent(file, patch) {
+  const i = recents.findIndex(r => r.path.toLowerCase() === file.toLowerCase());
+  const prev = i >= 0 ? recents.splice(i, 1)[0] : { path: file, name: path.basename(file, path.extname(file)) };
+  recents.unshift({ ...prev, ...patch, path: file, openedAt: Date.now() });
+  recents = recents.slice(0, 40);
+  saveRecents();
+}
+ipcMain.handle('get-recents', () => recents.filter(r => fs.existsSync(r.path)));
+ipcMain.handle('update-recent', (_e, file, patch) => { if (file) touchRecent(file, patch || {}); return true; });
+ipcMain.handle('remove-recent', (_e, file) => { recents = recents.filter(r => r.path !== file); saveRecents(); return true; });
+ipcMain.handle('clear-recents', () => { recents = []; saveRecents(); app.clearRecentDocuments(); return true; });
+ipcMain.handle('open-path', (_e, file) => { try { return readPdf(file); } catch { return null; } });
 function sendFile(file) {
   try { win.webContents.send('open-file', readPdf(file)); }
   catch { dialog.showErrorBox('Glass Reader', `This file couldn't be opened:\n${file}`); }
 }
 async function openDialog() {
   if (!win) return;
-  const r = await dialog.showOpenDialog(win, { title: 'Open PDF', filters: [{ name: 'PDF documents', extensions: ['pdf'] }], properties: ['openFile'] });
-  if (!r.canceled && r.filePaths[0]) sendFile(r.filePaths[0]);
+  const r = await dialog.showOpenDialog(win, { title: 'Open PDF', filters: [{ name: 'PDF documents', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
+  if (!r.canceled) for (const f of r.filePaths) sendFile(f); // each file opens in its own tab
 }
 function setJumpList() {
   if (process.platform !== 'win32') return;
