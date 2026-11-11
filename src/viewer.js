@@ -350,7 +350,7 @@ scrub.addEventListener('pointerdown', e => {
 
 /* =================== Layout & zoom =================== */
 function renderKey() { return state.zoom.toFixed(4) + '|' + state.rotation; }
-function isWide() { return innerWidth > 760; }
+function isWide() { return (app.clientWidth || innerWidth) > 760; }
 function layout(anchor) {
   const z = state.zoom * CSS_UNITS;
   for (const p of state.pages) {
@@ -438,8 +438,13 @@ function zoomStep(dir) {
   const next = dir > 0 ? steps.find(s => s > z + .01) : [...steps].reverse().find(s => s < z - .01);
   animateZoom(next ?? z);
 }
-let resizeT;
-addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { app.classList.toggle('wide', isWide()); if (state.fit) setZoom(fitZoom(state.fit), null, state.fit); else layout(getAnchor()); }, 120); });
+let resizeT, sidebarAutoHidden = false;
+addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => {
+  // Getting narrow (small window or split view): tuck the sidebar away so it doesn't cover the page.
+  const wide = isWide(), wasWide = app.classList.contains('wide');
+  if (!wide && wasWide && app.classList.contains('side-open')) { toggleSidebar(false); sidebarAutoHidden = true; }
+  else if (wide && !wasWide && sidebarAutoHidden) { sidebarAutoHidden = false; app.classList.add('wide'); toggleSidebar(true); }
+  app.classList.toggle('wide', wide); if (state.fit) setZoom(fitZoom(state.fit), null, state.fit); else layout(getAnchor()); }, 120); });
 
 viewer.addEventListener('wheel', e => {
   if (!(e.ctrlKey || e.metaKey)) { wheelScroll(e); return; }

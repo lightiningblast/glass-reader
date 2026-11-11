@@ -94,6 +94,7 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: true, // the split view's right pane gets the same safe bridge (preload)
       spellcheck: false,
       backgroundThrottling: false,
       additionalArguments: [`--gr-mica=${HAS_MICA ? 1 : 0}`, `--gr-win11=${IS_WIN11 ? 1 : 0}`]
@@ -142,14 +143,15 @@ ipcMain.handle('update-recent', (_e, file, patch) => { if (file) touchRecent(fil
 ipcMain.handle('remove-recent', (_e, file) => { recents = recents.filter(r => r.path !== file); saveRecents(); return true; });
 ipcMain.handle('clear-recents', () => { recents = []; saveRecents(); app.clearRecentDocuments(); return true; });
 ipcMain.handle('open-path', (_e, file) => { try { return readPdf(file); } catch { return null; } });
-function sendFile(file) {
-  try { win.webContents.send('open-file', readPdf(file)); }
+// `frame` is the pane that asked (left window or right split pane); files opened from outside go to the left.
+function sendFile(file, frame) {
+  try { (frame && !frame.isDestroyed?.() ? frame : win.webContents).send('open-file', readPdf(file)); }
   catch { dialog.showErrorBox('Glass Reader', `This file couldn't be opened:\n${file}`); }
 }
-async function openDialog() {
+async function openDialog(frame) {
   if (!win) return;
   const r = await dialog.showOpenDialog(win, { title: 'Open PDF', filters: [{ name: 'PDF documents', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
-  if (!r.canceled) for (const f of r.filePaths) sendFile(f); // each file opens in its own tab
+  if (!r.canceled) for (const f of r.filePaths) sendFile(f, frame); // each file opens in its own tab
 }
 function setJumpList() {
   if (process.platform !== 'win32') return;
@@ -186,7 +188,7 @@ ipcMain.handle('initial-file', () => {
   const file = pendingFile; pendingFile = null;
   try { return readPdf(file); } catch { return null; }
 });
-ipcMain.on('open-dialog', openDialog);
+ipcMain.on('open-dialog', e => openDialog(e.senderFrame));
 ipcMain.on('add-recent', (_e, file) => { if (file && /\.pdf$/i.test(file)) app.addRecentDocument(file); });
 ipcMain.handle('accent', () => { try { return systemPreferences.getAccentColor(); } catch { return null; } });
 

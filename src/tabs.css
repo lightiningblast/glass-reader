@@ -120,3 +120,26 @@ html.desktop #focusExit{top:calc(var(--ts) + 8px)}
 /* Big sheets need more body than bars so the page behind doesn't compete with their text. */
 .sheet.glass.panel{background:color-mix(in srgb,var(--bg) 86%,transparent)}
 .sheet-scrim{background:color-mix(in srgb,var(--bg) 45%,transparent)}
+
+/* ---------- Split view ---------- */
+#splitFrame{position:absolute;top:0;bottom:0;right:0;border:0;background:transparent;z-index:1;opacity:0;transform:translateX(24px);
+  transition:opacity .35s var(--ease),transform .55s var(--spring-soft)}
+html.split-in #splitFrame{opacity:1;transform:none}
+#splitDivider{position:absolute;top:var(--ts);bottom:0;width:6px;z-index:30;cursor:col-resize;display:grid;place-items:center;touch-action:none}
+#splitDivider::before{content:"";position:absolute;top:8px;bottom:8px;left:2.5px;width:1px;background:var(--sep);border-radius:1px}
+#splitDivider .grip{position:relative;width:6px;height:44px;border-radius:999px;transition:height .3s var(--spring),width .3s var(--spring)}
+#splitDivider:hover .grip,html.split-drag #splitDivider .grip{width:8px;height:64px}
+html.split-drag #splitFrame{pointer-events:none}
+html.split-drag,html.split-drag *{cursor:col-resize!important;user-select:none}
+html.split #app{transition:none}
+html.desktop.split:not(.pane-right) #tabstrip{padding-right:12px}
+html.pane-right #home .hbrand{display:none}
+.split-close{margin-left:2px}
+#splitBtn.on{color:var(--accent)}
+
+/* Tab right-click menu */
+#tabMenu{position:absolute;z-index:40;min-width:220px;padding:6px;border-radius:16px;display:flex;flex-direction:column;--origin:top left}
+#tabMenu button{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:10px;font-size:13px;text-align:left}
+#tabMenu button:hover{background:color-mix(in srgb,var(--fg) 8%,transparent)}
+#tabMenu button svg{width:17px;height:17px;color:var(--fg-2)}
+#tabMenu hr{border:0;height:1px;background:var(--sep);margin:4px 8px}

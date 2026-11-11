@@ -184,5 +184,37 @@
   });
   homeEl.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('.rrow')) e.target.click(); });
 
+  /* ---------- Right-click menu on a tab ---------- */
+  const menu = document.createElement('div');
+  menu.id = 'tabMenu'; menu.className = 'glass panel pop'; menu.setAttribute('role', 'menu');
+  app.append(menu);
+  const hideMenu = () => menu.classList.remove('show');
+  strip.addEventListener('contextmenu', e => {
+    const el = e.target.closest('.tab'); if (!el) return;
+    e.preventDefault();
+    const t = tabs.find(x => x.id === +el.dataset.id);
+    const canSplit = t.doc && GR.split && !GR.split.right;
+    menu.innerHTML = `
+      ${canSplit ? `<button data-m="split">${icon('split')}Open in split view</button><hr>` : ''}
+      <button data-m="close">${icon('x')}Close tab</button>
+      ${tabs.length > 1 ? `<button data-m="others">${icon('x')}Close other tabs</button>` : ''}`;
+    const ar = app.getBoundingClientRect();
+    menu.style.left = Math.min(e.clientX - ar.left, ar.width - 240) + 'px';
+    menu.style.top = (e.clientY - ar.top + 4) + 'px';
+    menu.onclick = async ev => {
+      const b = ev.target.closest('[data-m]'); if (!b) return; hideMenu();
+      if (b.dataset.m === 'close') close(t);
+      if (b.dataset.m === 'others') { for (const x of tabs.slice()) if (x !== t) await close(x); activate(t); }
+      if (b.dataset.m === 'split') {
+        // Like Edge: the tab moves to the right pane.
+        GR.split.open({ data: t.doc.bytes.slice(), name: t.doc.name, path: t.doc.path, seeds: t.doc.seeds });
+        close(t);
+      }
+    };
+    requestAnimationFrame(() => menu.classList.add('show'));
+  });
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('#tabMenu')) hideMenu(); });
+  addEventListener('blur', hideMenu);
+
   GR.tabs = { open, home, newTab, close: () => close(active), get active() { return active; }, get list() { return tabs.slice(); } };
 })();
