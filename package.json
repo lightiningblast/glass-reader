@@ -1,0 +1,74 @@
+{
+  "name": "glass-reader",
+  "productName": "Glass Reader",
+  "version": "1.0.0",
+  "description": "A liquid-glass PDF reader for Windows",
+  "author": "Glass Reader",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "postinstall": "node scripts/copy-vendor.js",
+    "start": "electron .",
+    "icon": "powershell -ExecutionPolicy Bypass -File scripts/make-icon.ps1",
+    "dist": "electron-builder --win nsis",
+    "release": "electron-builder --win nsis --publish always"
+  },
+  "build": {
+    "appId": "com.glassreader.app",
+    "productName": "Glass Reader",
+    "copyright": "Glass Reader",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Glass Reader",
+      "artifactName": "GlassReader-Setup-${version}.${ext}"
+    },
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "description": "PDF Document",
+        "role": "Viewer"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "lightiningblast",
+        "repo": "glass-reader"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "pdfjs-dist": "^3.11.174"
+  },
+  "devDependencies": {
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0"
+  }
+}
