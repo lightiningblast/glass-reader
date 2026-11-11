@@ -9,30 +9,25 @@ A liquid-glass PDF reader for Windows, built with Electron.
 | `npm start` | Runs the app from source |
 | `npm run dist` | Builds the installer into `dist\GlassReader-Setup-<version>.exe` |
 | `npm run icon` | Redraws `build\icon.png` |
-| `npm run release` | Builds and uploads a new version to GitHub Releases (auto-update) |
+| `npm run release -- 1.0.2` | Publishes version 1.0.2: builds, pushes and creates the GitHub release |
 
 ## How auto-updates work
 
 The installed app checks GitHub Releases for a newer version 4 seconds after it starts and then every 4 hours.
 It downloads the update in the background and shows a "Restart to update" bar. If you ignore the bar, the update installs the next time the app closes.
 
-### One-time setup
-
-1. Create a **public** GitHub repository named `glass-reader` under `lightiningblast` (the app looks for updates at github.com/lightiningblast/glass-reader).
-2. Create a GitHub personal access token with the `repo` scope.
+Updates come from https://github.com/lightiningblast/glass-reader/releases. The repo must stay public.
 
 ### Releasing an update
 
-1. Raise `"version"` in `package.json`, for example `1.0.0` to `1.0.1`.
-2. In PowerShell, run:
+Make your changes, then run, with a version number higher than the last one:
 
-   ```powershell
-   $env:GH_TOKEN = "<your token>"
-   npm run release
-   ```
+```powershell
+npm run release -- 1.0.2
+```
 
-3. On GitHub, open the draft release that was created and click **Publish release**.
-
+This sets the version, builds the installer, commits and pushes, and publishes the GitHub release.
+It uses the GitHub CLI (`gh`), which must be signed in (`gh auth status`).
 Installed copies pick up the update on their next check.
 
 ## Notes

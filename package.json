@@ -1,7 +1,7 @@
 {
   "name": "glass-reader",
   "productName": "Glass Reader",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A liquid-glass PDF reader for Windows",
   "author": "Glass Reader",
   "main": "main.js",
@@ -11,7 +11,7 @@
     "start": "electron .",
     "icon": "powershell -ExecutionPolicy Bypass -File scripts/make-icon.ps1",
     "dist": "electron-builder --win nsis",
-    "release": "electron-builder --win nsis --publish always"
+    "release": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
   },
   "build": {
     "appId": "com.glassreader.app",

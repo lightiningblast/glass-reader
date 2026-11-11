@@ -377,6 +377,7 @@ canvas.anno{position:absolute;inset:0;width:100%;height:100%;pointer-events:none
       <div class="mline"><button class="pill-btn" id="mRotL"><svg class="i"><use href="#i-rotl"/></svg>Rotate left</button><button class="pill-btn" id="mRotR"><svg class="i"><use href="#i-rotr"/></svg>Rotate right</button></div>
       <div class="mline"><button class="pill-btn" id="mFocus"><svg class="i"><use href="#i-focus"/></svg>Focus mode</button><button class="pill-btn" id="mSample"><svg class="i"><use href="#i-doc"/></svg>Sample PDF</button></div>
     </div>
+    <div id="appVersion" style="font-size:11.5px;color:var(--fg-3);text-align:center;font-variant-numeric:tabular-nums" hidden></div>
   </div>
 
   <nav id="dock" class="glass bar" aria-label="Tools">
@@ -1450,6 +1451,7 @@ if (window.desktop) {
     root.style.setProperty('--accent-soft', `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},.2)`);
   };
   window.desktop.accent().then(applyAccent, () => {});
+  window.desktop.version().then(v => { const el = $('#appVersion'); el.textContent = 'Glass Reader ' + v; el.hidden = false; }, () => {});
   window.desktop.onAccent(applyAccent);
 }
 app.classList.toggle('wide', isWide());
