@@ -67,55 +67,92 @@
   });
   strip.addEventListener('auxclick', e => { if (e.button !== 1) return; const el = e.target.closest('.tab'); if (el) close(tabs.find(x => x.id === +el.dataset.id)); });
   /* ---------- Dragging tabs ----------
-     Within the strip: reorder. Onto the other split pane: move the tab there.
-     Out of the window: the tab becomes its own window (ready for Windows Snap). */
+     Within the strip: reorder. Onto the other split pane or another Glass Reader window: move it there.
+     Out of every window: the tab becomes its own window (ready for Windows Snap).
+     A dragged tab is labelled with its window and pane, e.g. application/x-gr-tab-3-left. */
   const pane = () => (GR.split && GR.split.right) ? 'right' : 'left';
-  const otherPane = () => pane() === 'left' ? 'right' : 'left';
-  const TAB_TYPE = p => 'application/x-gr-tab-' + p;
+  let winId = 0;
+  if (D && D.winId) D.winId().then(id => { winId = id; });
+  const PREFIX = 'application/x-gr-tab-';
+  const myType = () => PREFIX + winId + '-' + pane();
+  const parseType = t => { const m = /^application\/x-gr-tab-(\d+)-(left|right)$/.exec(t); return m ? { win: +m[1], pane: m[2] } : null; };
+  const foreignType = dt => [...dt.types].find(t => t.startsWith(PREFIX) && t !== myType());
   const docOf = t => ({ data: t.doc.bytes.slice(), name: t.doc.name, path: t.doc.path, seeds: t.doc.seeds });
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // After a tab leaves: close it, or close the whole window if that was its last tab (like Edge).
+  async function finish(t) {
+    const lastInWindow = pane() === 'left' && !(GR.split && GR.split.on) && tabs.length === 1 && tabs[0] === t;
+    if (lastInWindow && D && D.closeWindowIfOthers && await D.closeWindowIfOthers()) return;
+    close(t);
+  }
   let dragId = null;
   strip.addEventListener('dragstart', e => {
     const el = e.target.closest('.tab'); if (!el) return;
     dragId = +el.dataset.id;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData(TAB_TYPE(pane()), String(dragId));
+    e.dataTransfer.setData(myType(), String(dragId));
     e.dataTransfer.setData('text/plain', el.querySelector('.tab-t').textContent);
     el.classList.add('dragging');
   });
   strip.addEventListener('dragend', async e => {
     const t = tabs.find(x => x.id === dragId); dragId = null; renderTabs();
     if (!t || !t.doc || !D || !D.tearOff || e.dataTransfer.dropEffect !== 'none') return;
-    // Dropped outside every Glass Reader pane? Check where the pointer ended up.
+    // Dropped outside every Glass Reader window? Check where the pointer ended up,
+    // and give another window a moment to claim the tab first.
     const at = await D.cursor();
+    await wait(250);
+    if (!tabs.includes(t)) return;
     const inside = at.x >= screenX && at.x < screenX + outerWidth && at.y >= screenY && at.y < screenY + outerHeight;
     if (inside) return;
     D.tearOff(docOf(t), at);
-    close(t);
+    finish(t);
   });
-  moveToWindow = t => { if (t && t.doc && D && D.tearOff) { D.tearOff(docOf(t), null); close(t); } };
-  // Accept a tab dragged from the other split pane.
+  moveToWindow = t => { if (t && t.doc && D && D.tearOff) { D.tearOff(docOf(t), null); finish(t); } };
+  // Accept a tab from the other split pane or another window.
   document.addEventListener('dragover', e => {
-    if (!e.dataTransfer.types.includes(TAB_TYPE(otherPane()))) return;
+    if (!foreignType(e.dataTransfer)) return;
     e.preventDefault(); e.dataTransfer.dropEffect = 'move'; app.classList.add('tab-drop');
   }, true);
   document.addEventListener('dragleave', e => { if (!e.relatedTarget) app.classList.remove('tab-drop'); }, true);
   document.addEventListener('drop', e => {
     app.classList.remove('tab-drop');
-    const id = e.dataTransfer.getData(TAB_TYPE(otherPane())); if (!id) return;
+    const type = foreignType(e.dataTransfer); if (!type) return;
+    const id = +e.dataTransfer.getData(type), src = parseType(type); if (!src || !id) return;
     e.preventDefault(); e.stopPropagation();
-    const target = pane() === 'right' ? parent : ($('#splitFrame') || {}).contentWindow;
-    if (target) target.postMessage({ type: 'gr-give-tab', id: +id }, '*');
+    if (src.win === winId) { // the other pane of this window
+      const target = pane() === 'right' ? parent : ($('#splitFrame') || {}).contentWindow;
+      if (target) target.postMessage({ type: 'gr-give-tab', id }, '*');
+    } else if (D && D.pullTab) D.pullTab({ win: src.win, pane: src.pane, id }); // another window
   }, true);
+  // Handing a tab over to another window (it arrives through the app shell).
+  async function give(id, req) {
+    const t = tabs.find(x => x.id === id);
+    if (!t || !t.doc) { D.tabData(req, null); return; }
+    D.tabData(req, docOf(t));
+    await finish(t);
+  }
+  if (D && D.onGiveTab) D.onGiveTab(m => {
+    if (m.pane === pane()) give(m.id, m.req);
+    else if (pane() === 'left') { const f = $('#splitFrame'); if (f) f.contentWindow.postMessage({ type: 'gr-give-ipc', id: m.id, req: m.req }, '*'); }
+  });
+  let forwardTakes = 0; // tabs fetched from other windows for the right pane
+  if (D && D.onTakeTab) D.onTakeTab(d => {
+    const f = $('#splitFrame');
+    if (forwardTakes > 0 && f) { forwardTakes--; f.contentWindow.postMessage({ type: 'gr-take-tab', doc: d }, '*'); return; }
+    GR.openPdf(new Uint8Array(d.data), d.name, d.seeds, { path: d.path });
+  });
   addEventListener('message', e => {
     const m = e.data; if (!m || !m.type) return;
     const frame = $('#splitFrame');
-    const fromPane = e.source === parent && parent !== window || (frame && e.source === frame.contentWindow);
+    const fromPane = (e.source === parent && parent !== window) || (frame && e.source === frame.contentWindow);
     if (!fromPane) return;
     if (m.type === 'gr-give-tab') {
       const t = tabs.find(x => x.id === m.id); if (!t || !t.doc) return;
       e.source.postMessage({ type: 'gr-take-tab', doc: docOf(t) }, '*');
       close(t);
     }
+    if (m.type === 'gr-give-ipc') give(m.id, m.req);
+    if (m.type === 'gr-pull-for-right' && D && D.pullTab) { forwardTakes++; D.pullTab(m.src); }
     if (m.type === 'gr-take-tab') { const d = m.doc; GR.openPdf(new Uint8Array(d.data), d.name, d.seeds, { path: d.path }); }
   });
   strip.addEventListener('dragover', e => {

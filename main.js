@@ -211,7 +211,37 @@ ipcMain.on('tear-off', (_e, doc, at) => {
   createWindow({ doc, at: pt });
 });
 ipcMain.on('new-window', () => createWindow());
+// Moving a tab between windows. The window it was dropped on asks (pull-tab); the source window
+// hands the document over (tab-data); it lands in the exact pane that asked (take-tab).
+const { webContents } = require('electron');
+const tabRequests = new Map(); let tabReqId = 0;
+ipcMain.handle('win-id', e => e.sender.id);
+ipcMain.on('pull-tab', (e, src) => {
+  const wc = src && webContents.fromId(src.win);
+  if (!wc || wc.isDestroyed()) return;
+  const req = ++tabReqId;
+  tabRequests.set(req, e.senderFrame);
+  wc.send('give-tab', { pane: src.pane, id: src.id, req });
+  setTimeout(() => tabRequests.delete(req), 15000);
+});
+ipcMain.on('tab-data', (_e, req, doc) => {
+  const frame = tabRequests.get(req); tabRequests.delete(req);
+  if (frame && doc) { try { frame.send('take-tab', doc); } catch {} }
+});
+// Closes the asking window only when another Glass Reader window stays open.
+ipcMain.handle('close-window-if-others', e => {
+  const w = winOf(e);
+  if (!w || allWins().length < 2) return false;
+  setTimeout(() => alive(w) && w.close(), 50);
+  return true;
+});
 ipcMain.on('open-dialog', e => openDialog(e.senderFrame, winOf(e)));
+// Same as the Open dialog, but returns the files to the caller (used by the split view's right pane).
+ipcMain.handle('pick-files', async e => {
+  const r = await dialog.showOpenDialog(winOf(e), { title: 'Open PDF', filters: [{ name: 'PDF documents', extensions: ['pdf'] }], properties: ['openFile', 'multiSelections'] });
+  if (r.canceled) return [];
+  return r.filePaths.map(f => { try { return readPdf(f); } catch { return null; } }).filter(Boolean);
+});
 ipcMain.on('add-recent', (_e, file) => { if (file && /\.pdf$/i.test(file)) app.addRecentDocument(file); });
 ipcMain.handle('accent', () => { try { return systemPreferences.getAccentColor(); } catch { return null; } });
 ipcMain.handle('cursor', () => screen.getCursorScreenPoint());
